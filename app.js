@@ -226,7 +226,7 @@ function renderMedications(el) {
   });
 
   if (meds.length === 0) {
-    el.innerHTML = `<div class="empty"><div class="empty-icon">💊</div><p>No medications added yet.<br>Tap <strong>Add Item</strong> to add one.</p></div>`;
+    el.innerHTML = `<div class="empty"><div class="empty-icon">💊</div><p>No medications added yet.<br>Tap <strong>Add Manually</strong> below to add one.</p></div>`;
     return;
   }
 
@@ -701,11 +701,27 @@ function onDateFound(date) {
   showStep3();
 }
 
+// ── Manual entry: skip straight to step 3 ──
+function showManualEntry() {
+  // Pre-select medication category if we're on the meds tab
+  scanData = {
+    name: '',
+    barcode: '',
+    expiry: '',
+    category: activeTab === 'medications' ? 'medication' : 'cupboard',
+  };
+  openModal('scan-modal');
+  // Hide the step indicators — not relevant for manual entry
+  document.querySelector('.steps').style.display = 'none';
+  document.getElementById('modal-subtitle').textContent = 'Enter item details';
+  showStep3(true);
+}
+
 // ── Step 3: Confirm & categorise ──
-function showStep3() {
+function showStep3(isManual = false) {
   scanStep = 3;
   updateSteps(3);
-  setSubtitle('Step 3 of 3 — Confirm details');
+  setSubtitle(isManual ? 'Enter item details' : 'Step 3 of 3 — Confirm details');
   const body = document.getElementById('modal-body');
   const catOptions = CATEGORIES.map(c => {
     const label = c.charAt(0).toUpperCase() + c.slice(1);
@@ -716,11 +732,17 @@ function showStep3() {
   body.innerHTML = `
     <div class="field">
       <label>Product name</label>
-      <input type="text" id="confirm-name" value="${esc(scanData.name)}" placeholder="e.g. Oat milk" />
+      <input type="text" id="confirm-name" value="${esc(scanData.name)}" placeholder="e.g. Paracetamol 500mg" />
     </div>
     <div class="field">
-      <label>Barcode</label>
-      <input type="text" id="confirm-barcode" value="${esc(scanData.barcode)}" readonly style="opacity:0.6" />
+      <label>Barcode ${isManual ? '(optional — tap to scan)' : ''}</label>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="confirm-barcode" value="${esc(scanData.barcode)}"
+          placeholder="Optional" style="${isManual?'':'opacity:0.6'}"
+          ${isManual?'':'readonly'} />
+        ${isManual ? `<button class="btn-icon" id="btn-inline-scan" title="Scan barcode">📷</button>` : ''}
+      </div>
+      <div id="inline-scanner" style="display:none;margin-top:10px"></div>
     </div>
     <div class="field">
       <label>Category</label>
@@ -728,7 +750,7 @@ function showStep3() {
     </div>
     <div id="confirm-extra"></div>
     <button class="btn btn-primary" id="btn-save-item">✅ Add to Pantry</button>
-    <button class="btn btn-secondary" onclick="showStep2()" style="margin-top:8px">← Back</button>`;
+    <button class="btn btn-secondary" onclick="${isManual ? "closeModal('scan-modal')" : 'showStep2()'}" style="margin-top:8px">${isManual ? '✕ Cancel' : '← Back'}</button>`;
 
   // Show/hide extra fields based on category
   function updateExtraFields() {
@@ -771,6 +793,60 @@ function showStep3() {
   updateExtraFields();
   document.getElementById('confirm-cat').addEventListener('change', updateExtraFields);
   document.getElementById('btn-save-item').onclick = saveItem;
+
+  // Optional inline barcode scanner (manual entry mode only)
+  const inlineScanBtn = document.getElementById('btn-inline-scan');
+  if (inlineScanBtn) {
+    inlineScanBtn.onclick = async () => {
+      const wrap = document.getElementById('inline-scanner');
+      if (wrap.style.display !== 'none') {
+        // Toggle off
+        stopCamera();
+        wrap.style.display = 'none';
+        inlineScanBtn.textContent = '📷';
+        return;
+      }
+      wrap.style.display = 'block';
+      inlineScanBtn.textContent = '⏹️';
+      wrap.innerHTML = `
+        <div class="viewfinder-wrap" style="margin-bottom:8px">
+          <video id="inline-video" playsinline muted autoplay></video>
+          <div class="scan-overlay"><div class="scan-box"></div></div>
+          <div class="scan-hint">Centre the barcode in the box</div>
+        </div>
+        <div class="ocr-status" id="inline-status">
+          <span class="spinner">⏳</span> <span>Starting camera…</span>
+        </div>`;
+      const video = document.getElementById('inline-video');
+      const ok = await startCamera(video);
+      const status = document.getElementById('inline-status');
+      if (!ok) {
+        status.innerHTML = `<span>⚠️</span> <span>Camera unavailable — enter barcode manually.</span>`;
+        return;
+      }
+      status.innerHTML = `<span class="spinner">⏳</span> <span>Scanning…</span>`;
+      barcodeWorker = setInterval(async () => {
+        if (!videoStream) return;
+        const canvas = captureFrame(video);
+        const code   = await detectBarcode(canvas);
+        if (code) {
+          clearInterval(barcodeWorker); barcodeWorker = null;
+          stopCamera();
+          document.getElementById('confirm-barcode').value = code;
+          wrap.style.display = 'none';
+          inlineScanBtn.textContent = '📷';
+          // Try to look up the product name
+          status.innerHTML = `<span>🔍</span> <span>Found ${code} — looking up product…</span>`;
+          wrap.style.display = 'block';
+          const name = await lookupBarcode(code);
+          if (name && !document.getElementById('confirm-name').value) {
+            document.getElementById('confirm-name').value = name;
+          }
+          wrap.style.display = 'none';
+        }
+      }, 400);
+    };
+  }
 }
 
 async function saveItem() {
@@ -1129,7 +1205,13 @@ if ('serviceWorker' in navigator) {
 document.getElementById('fab-scan').onclick = () => {
   scanData = {};
   openModal('scan-modal');
+  // Make sure step indicators are visible for scan flow
+  document.querySelector('.steps').style.display = 'flex';
   showStep1();
+};
+
+document.getElementById('fab-manual').onclick = () => {
+  showManualEntry();
 };
 
 document.getElementById('btn-drive').onclick = openDriveModal;

@@ -85,6 +85,60 @@ function fmtDate(dateStr) {
   return `${dd}/${m}/${y}`;
 }
 
+// ── UK date picker: renders DD/MM/YYYY dropdowns ──
+// id:    base id (creates id-day, id-month, id-year)
+// value: optional pre-fill in YYYY-MM-DD format
+// min:   optional minimum date in YYYY-MM-DD format
+function ukDatePicker(id, value = '', min = '') {
+  const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const now = new Date();
+  const minYear = min ? parseInt(min.split('-')[0]) : now.getFullYear();
+  const maxYear = now.getFullYear() + 10;
+
+  let selDay = '', selMonth = '', selYear = '';
+  if (value) {
+    const [y, m, d] = value.split('-');
+    selYear = y; selMonth = m; selDay = d;
+  }
+
+  const days = Array.from({length:31}, (_,i) => {
+    const v = String(i+1).padStart(2,'0');
+    return `<option value="${v}" ${selDay===v?'selected':''}>${i+1}</option>`;
+  }).join('');
+
+  const mons = months.map((name,i) => {
+    const v = String(i+1).padStart(2,'0');
+    return `<option value="${v}" ${selMonth===v?'selected':''}>${name}</option>`;
+  }).join('');
+
+  const years = Array.from({length: maxYear - minYear + 1}, (_,i) => {
+    const v = String(minYear + i);
+    return `<option value="${v}" ${selYear===v?'selected':''}>${v}</option>`;
+  }).join('');
+
+  return `
+    <div style="display:flex;gap:6px" id="${id}-wrap">
+      <select id="${id}-day" style="flex:1;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:11px 8px;color:var(--text);font-family:var(--font-body);font-size:0.9rem;outline:none">
+        <option value="">DD</option>${days}
+      </select>
+      <select id="${id}-month" style="flex:1.4;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:11px 8px;color:var(--text);font-family:var(--font-body);font-size:0.9rem;outline:none">
+        <option value="">MMM</option>${mons}
+      </select>
+      <select id="${id}-year" style="flex:1.4;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:11px 8px;color:var(--text);font-family:var(--font-body);font-size:0.9rem;outline:none">
+        <option value="">YYYY</option>${years}
+      </select>
+    </div>`;
+}
+
+// Read value from a ukDatePicker as YYYY-MM-DD, or '' if incomplete
+function getUkDate(id) {
+  const d = document.getElementById(`${id}-day`)?.value;
+  const m = document.getElementById(`${id}-month`)?.value;
+  const y = document.getElementById(`${id}-year`)?.value;
+  if (!d || !m || !y) return '';
+  return `${y}-${m}-${d}`;
+}
+
 function expiryLabel(dateStr) {
   const d = daysUntil(dateStr);
   if (d < 0)  return `Expired ${Math.abs(d)}d ago`;
@@ -650,7 +704,7 @@ async function showStep2() {
     <button class="btn btn-primary" id="btn-capture-date" disabled>📸 Capture & Read Date</button>
     <div class="field" style="margin-top:14px">
       <label>Or enter date manually</label>
-      <input type="date" id="manual-date" min="${today()}" />
+      ${ukDatePicker("manual-date", "", today())}
     </div>
     <button class="btn btn-secondary" id="btn-manual-date">Continue with manual date</button>
     <button class="btn btn-secondary" onclick="showStep1()" style="margin-top:8px">← Back</button>`;
@@ -676,8 +730,16 @@ async function showStep2() {
     const parsed = await ocrDate(canvas);
     if (parsed) {
       ocrSt.innerHTML = `<span>✅</span> <span>Date read: <strong>${parsed}</strong> — check it below</span>`;
-      const md = document.getElementById('manual-date');
-      if (md) md.value = parsed;
+      // Fill the UK date picker dropdowns from the parsed YYYY-MM-DD string
+      if (parsed) {
+        const [py, pm, pd] = parsed.split('-');
+        const dayEl   = document.getElementById('manual-date-day');
+        const monEl   = document.getElementById('manual-date-month');
+        const yearEl  = document.getElementById('manual-date-year');
+        if (dayEl)  dayEl.value  = pd;
+        if (monEl)  monEl.value  = pm;
+        if (yearEl) yearEl.value = py;
+      }
     } else {
       ocrSt.innerHTML = `<span>⚠️</span> <span>Couldn't read date clearly. Please enter it manually.</span>`;
     }
@@ -690,7 +752,7 @@ async function showStep2() {
   };
 
   document.getElementById('btn-manual-date').onclick = () => {
-    const val = document.getElementById('manual-date').value;
+    const val = getUkDate('manual-date');
     if (val) onDateFound(val);
   };
 }
@@ -782,7 +844,7 @@ function showStep3(isManual = false) {
         </div>
         <div class="field">
           <label>Expiry date (optional)</label>
-          <input type="date" id="confirm-date" />
+          ${ukDatePicker("confirm-date", "")}
         </div>
         <div class="field">
           <label>Notes (dosage instructions etc, optional)</label>
@@ -792,7 +854,7 @@ function showStep3(isManual = false) {
       extra.innerHTML = `
         <div class="field">
           <label>Use-by / Best before (optional for non-food)</label>
-          <input type="date" id="confirm-date" value="${esc(scanData.expiry||'')}" />
+          ${ukDatePicker("confirm-date", scanData.expiry||"")}
         </div>`;
     }
   }
@@ -860,8 +922,7 @@ async function saveItem() {
   const name    = document.getElementById('confirm-name').value.trim();
   const barcode = document.getElementById('confirm-barcode').value.trim();
   const cat     = document.getElementById('confirm-cat').value;
-  const dateEl  = document.getElementById('confirm-date');
-  const expiry  = dateEl ? dateEl.value : '';
+  const expiry  = getUkDate('confirm-date');
 
   if (!name) { alert('Please enter a product name.'); return; }
 

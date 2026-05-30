@@ -139,6 +139,19 @@ async function signInWithGoogle() {
           localStorage.setItem('pantry-auth-token', authToken);
           // Derive encryption key from Google sub (unique stable user ID)
           encKey = await deriveKey(userinfo.sub);
+
+          // Send the encryption key to the service worker so it can
+          // decrypt push notifications even when the app isn't open
+          if (navigator.serviceWorker.controller) {
+            navigator.serviceWorker.controller.postMessage({
+              type: 'SET_ENC_KEY',
+              key:  encKey,
+            });
+          }
+
+          // Register for push notifications
+          await registerPushSubscription();
+
           resolve(serverUser);
         } catch(e) { reject(e); }
       },
@@ -172,6 +185,54 @@ async function buildNotifSummary(itemList) {
 
   if (!lines.length) return '';
   return encryptData(encKey, { title: 'Pantry — items need attention', body: lines.join('\n') });
+}
+
+// ── Register push subscription with server ──
+async function registerPushSubscription() {
+  if (!('Notification' in window) || !('PushManager' in window)) {
+    console.log('[Push] Not supported in this browser');
+    return;
+  }
+
+  // Ask for notification permission
+  const permission = await Notification.requestPermission();
+  if (permission !== 'granted') {
+    console.log('[Push] Permission denied');
+    return;
+  }
+
+  try {
+    const reg = await navigator.serviceWorker.ready;
+
+    // Get the VAPID public key from the server
+    const r   = await fetch(`${SERVER_URL}/push/vapid-public-key`);
+    const { key } = await r.json();
+
+    // Convert the hex VAPID key to a Uint8Array
+    const vapidKey = new Uint8Array(
+      key.match(/.{1,2}/g).map(b => parseInt(b, 16))
+    );
+
+    // Subscribe to push
+    const subscription = await reg.pushManager.subscribe({
+      userVisibleOnly:      true,
+      applicationServerKey: vapidKey,
+    });
+
+    // Send subscription to server
+    await fetch(`${SERVER_URL}/push/subscribe`, {
+      method:  'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization:  `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ subscription: subscription.toJSON() }),
+    });
+
+    console.log('[Push] Subscribed successfully');
+  } catch(e) {
+    console.error('[Push] Subscription failed:', e);
+  }
 }
 
 async function syncToServer(itemList) {
@@ -1537,6 +1598,14 @@ document.getElementById('search').addEventListener('input', e => {
   await loadItems();
   await runMedCountdowns();
   render();
+
+  // If already signed in from a previous session, re-send the key to the SW
+  // The SW loses the key when it restarts, so we need to resend it on every app open
+  if (authToken && encKey && navigator.serviceWorker.controller) {
+    navigator.serviceWorker.ready.then(reg => {
+      reg.active?.postMessage({ type: 'SET_ENC_KEY', key: encKey });
+    });
+  }
 
   // Schedule next countdown check at midnight
   function scheduleNextMidnight() {

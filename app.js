@@ -610,7 +610,7 @@ async function loadItems() {
 // ═══════════════════════════════════════════════
 
 // !! REPLACE THIS with your own Client ID from Google Cloud Console !!
-const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID_HERE';
+const GOOGLE_CLIENT_ID = '756553788670-lqo1h7gqf91csgr1j5c5ji77fonmnts5.apps.googleusercontent.com';
 
 const DRIVE_SCOPE    = 'https://www.googleapis.com/auth/drive.appdata';
 const DRIVE_FILENAME = 'pantry-tracker-backup.json';

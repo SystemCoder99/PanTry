@@ -703,18 +703,25 @@ function onDateFound(date) {
 
 // ── Manual entry: skip straight to step 3 ──
 function showManualEntry() {
-  // Pre-select medication category if we're on the meds tab
-  scanData = {
-    name: '',
-    barcode: '',
-    expiry: '',
-    category: activeTab === 'medications' ? 'medication' : 'cupboard',
-  };
-  openModal('scan-modal');
-  // Hide the step indicators — not relevant for manual entry
-  document.querySelector('.steps').style.display = 'none';
-  document.getElementById('modal-subtitle').textContent = 'Enter item details';
-  showStep3(true);
+  try {
+    // Pre-select medication category if we're on the meds tab
+    scanData = {
+      name:     '',
+      barcode:  '',
+      expiry:   '',
+      category: activeTab === 'medications' ? 'medication' : 'cupboard',
+    };
+    openModal('scan-modal');
+    // Reset modal title and hide step dots — not needed for manual entry
+    const stepsEl = document.querySelector('#scan-modal .steps');
+    if (stepsEl) stepsEl.style.display = 'none';
+    const subtitleEl = document.getElementById('modal-subtitle');
+    if (subtitleEl) subtitleEl.textContent = 'Enter item details';
+    showStep3(true);
+  } catch(e) {
+    console.error('showManualEntry failed:', e);
+    alert('Something went wrong opening the form. Please try again.');
+  }
 }
 
 // ── Step 3: Confirm & categorise ──
@@ -1206,13 +1213,12 @@ document.getElementById('fab-scan').onclick = () => {
   scanData = {};
   openModal('scan-modal');
   // Make sure step indicators are visible for scan flow
-  document.querySelector('.steps').style.display = 'flex';
+  const stepsEl = document.querySelector('#scan-modal .steps');
+  if (stepsEl) stepsEl.style.display = 'flex';
   showStep1();
 };
 
-document.getElementById('fab-manual').onclick = () => {
-  showManualEntry();
-};
+document.getElementById('fab-manual').onclick = showManualEntry;
 
 document.getElementById('btn-drive').onclick = openDriveModal;
 

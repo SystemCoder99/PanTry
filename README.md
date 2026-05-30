@@ -1,1 +1,1 @@
-# StockTake
+# Pantry (Pan-Try)

@@ -97,34 +97,69 @@ function expiryLabel(dateStr) {
 // ═══════════════════════════════════════════════
 //  Category icons
 // ═══════════════════════════════════════════════
-const CAT_ICONS = { fridge:'🧊', freezer:'❄️', cupboard:'🗄️', other:'📦' };
-const CATEGORIES = ['fridge','freezer','cupboard','other'];
+const CAT_ICONS = {
+  fridge:'🧊', freezer:'❄️', cupboard:'🗄️',
+  drinks:'🧃', cleaning:'🧹', bathroom:'🚿',
+  medication:'💊', other:'📦'
+};
+const CATEGORIES     = ['fridge','freezer','cupboard','drinks','cleaning','bathroom','medication','other'];
+const FOOD_CATS      = ['fridge','freezer','cupboard','drinks'];
+const MED_CAT        = 'medication';
+
+// ── Medication helpers ──
+function daysOfStock(item) {
+  if (item.quantity == null || !item.dailyDose) return null;
+  return Math.floor(item.quantity / item.dailyDose);
+}
+function medStockClass(item) {
+  const d = daysOfStock(item);
+  if (d === null) return 'ok';
+  if (d <= 7)  return 'expired';
+  if (d <= 14) return 'warn';
+  return 'ok';
+}
+function medStockLabel(item) {
+  const d = daysOfStock(item);
+  if (d === null) return item.quantity != null ? `${item.quantity} remaining` : 'Qty not set';
+  if (d <= 0)  return 'Out of stock!';
+  if (d === 1) return '1 day left';
+  return `~${d} days left (${item.quantity} remaining)`;
+}
 
 // ═══════════════════════════════════════════════
 //  Render
 // ═══════════════════════════════════════════════
 function render() {
   const el = document.getElementById('main-content');
-  let filtered = items.filter(i => !i.removed);
 
-  // Tab filter
-  if (activeTab === 'expiring') {
-    filtered = filtered.filter(i => { const d = daysUntil(i.expiry); return d >= 0 && d <= 3; });
-  } else if (activeTab === 'expired') {
-    filtered = filtered.filter(i => daysUntil(i.expiry) < 0);
+  if (activeTab === 'medications') {
+    renderMedications(el);
+    return;
   }
 
-  // Search
+  // Non-medication items only in pantry/expiring/expired tabs
+  let filtered = items.filter(i => !i.removed && i.category !== MED_CAT);
+
+  if (activeTab === 'expiring') {
+    filtered = filtered.filter(i => i.expiry && daysUntil(i.expiry) >= 0 && daysUntil(i.expiry) <= 3);
+  } else if (activeTab === 'expired') {
+    filtered = filtered.filter(i => i.expiry && daysUntil(i.expiry) < 0);
+  }
+
   if (searchQuery) {
     const q = searchQuery.toLowerCase();
-    filtered = filtered.filter(i => i.name.toLowerCase().includes(q) || i.barcode.includes(q));
+    filtered = filtered.filter(i => i.name.toLowerCase().includes(q) || (i.barcode||'').includes(q));
   }
 
-  // Update expiring tab badge
-  const expiringCount = items.filter(i => !i.removed && daysUntil(i.expiry) >= 0 && daysUntil(i.expiry) <= 3).length;
-  const expiredCount  = items.filter(i => !i.removed && daysUntil(i.expiry) < 0).length;
-  document.querySelectorAll('nav button')[1].querySelector('.nav-icon').textContent = expiringCount ? `⏰` : '⏰';
-  document.querySelectorAll('nav button')[2].querySelector('.nav-icon').textContent = expiredCount  ? `🚨` : '🚨';
+  // Badge counts
+  const nonMed      = items.filter(i => !i.removed && i.category !== MED_CAT);
+  const expiringCount = nonMed.filter(i => i.expiry && daysUntil(i.expiry) >= 0 && daysUntil(i.expiry) <= 3).length;
+  const expiredCount  = nonMed.filter(i => i.expiry && daysUntil(i.expiry) < 0).length;
+  const medLowCount   = items.filter(i => !i.removed && i.category === MED_CAT && medStockClass(i) !== 'ok').length;
+  const navBtns = document.querySelectorAll('nav button');
+  navBtns[1].querySelector('.nav-icon').textContent = '⏰';
+  navBtns[2].querySelector('.nav-icon').textContent = '🚨';
+  navBtns[3].querySelector('.nav-icon').textContent = medLowCount ? '💊' : '💊';
 
   if (filtered.length === 0) {
     el.innerHTML = `
@@ -139,12 +174,6 @@ function render() {
     return;
   }
 
-  // Group by category
-  const groups = {};
-  for (const cat of CATEGORIES) groups[cat] = [];
-  for (const item of filtered) (groups[item.category] || (groups['other'] = groups['other'] || [])).push(item) && 0 || groups[item.category]?.push(item) || groups['other'].push(item);
-
-  // rebuild groups properly
   const grouped = {};
   for (const cat of CATEGORIES) grouped[cat] = [];
   for (const item of filtered) {
@@ -154,21 +183,22 @@ function render() {
 
   let html = '';
   for (const cat of CATEGORIES) {
+    if (cat === MED_CAT) continue;
     const g = grouped[cat];
     if (!g.length) continue;
-    // Sort: expired first, then by date ascending
-    g.sort((a,b) => new Date(a.expiry) - new Date(b.expiry));
+    g.sort((a,b) => new Date(a.expiry||'9999') - new Date(b.expiry||'9999'));
+    const label = cat.charAt(0).toUpperCase() + cat.slice(1);
     html += `<div class="category-group">
-      <div class="category-header">${CAT_ICONS[cat]} ${cat}</div>`;
+      <div class="category-header">${CAT_ICONS[cat]} ${label}</div>`;
     for (const item of g) {
-      const ec = expiryClass(item.expiry);
+      const ec = item.expiry ? expiryClass(item.expiry) : 'ok';
       html += `
         <div class="item-card ${ec}" data-id="${item.id}">
           <div class="item-info">
             <div class="item-name">${esc(item.name)}</div>
             <div class="item-meta">
-              <span class="item-date ${ec}">${expiryLabel(item.expiry)}</span>
-              <span class="item-barcode">${esc(item.barcode)}</span>
+              ${item.expiry ? `<span class="item-date ${ec}">${expiryLabel(item.expiry)}</span>` : ''}
+              ${item.barcode ? `<span class="item-barcode">${esc(item.barcode)}</span>` : ''}
             </div>
           </div>
           <div class="item-actions">
@@ -179,6 +209,52 @@ function render() {
     }
     html += `</div>`;
   }
+  el.innerHTML = html;
+}
+
+function renderMedications(el) {
+  let meds = items.filter(i => !i.removed && i.category === MED_CAT);
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    meds = meds.filter(i => i.name.toLowerCase().includes(q));
+  }
+  // Sort: out of stock first, then by days of stock ascending
+  meds.sort((a,b) => {
+    const da = daysOfStock(a) ?? 999;
+    const db = daysOfStock(b) ?? 999;
+    return da - db;
+  });
+
+  if (meds.length === 0) {
+    el.innerHTML = `<div class="empty"><div class="empty-icon">💊</div><p>No medications added yet.<br>Tap <strong>Add Item</strong> to add one.</p></div>`;
+    return;
+  }
+
+  let html = '<div class="category-group"><div class="category-header">💊 Medications</div>';
+  for (const item of meds) {
+    const sc = medStockClass(item);
+    const hasExpiry = !!item.expiry;
+    const ec = hasExpiry ? expiryClass(item.expiry) : 'ok';
+    // Overall card status: worst of stock and expiry
+    const cardClass = (sc === 'expired' || ec === 'expired') ? 'expired' : (sc === 'warn' || ec === 'warn') ? 'warn' : 'ok';
+    html += `
+      <div class="item-card ${cardClass}" data-id="${item.id}">
+        <div class="item-info">
+          <div class="item-name">${esc(item.name)}</div>
+          <div class="item-meta">
+            <span class="item-date ${sc}">${medStockLabel(item)}</span>
+            ${item.dailyDose ? `<span class="item-barcode">${item.dailyDose}/day</span>` : ''}
+            ${hasExpiry ? `<span class="item-date ${ec}" style="margin-left:2px">${expiryLabel(item.expiry)}</span>` : ''}
+          </div>
+          ${item.notes ? `<div style="font-size:0.78rem;color:var(--muted);margin-top:4px">${esc(item.notes)}</div>` : ''}
+        </div>
+        <div class="item-actions">
+          ${item.autoCountdown !== false && item.dailyDose ? `<button class="btn-icon" onclick="logDose('${item.id}')" title="Take a dose">💊</button>` : ''}
+          <button class="btn-icon" onclick="openDetail('${item.id}')" title="Details">ℹ️</button>
+        </div>
+      </div>`;
+  }
+  html += '</div>';
   el.innerHTML = html;
 }
 
@@ -201,33 +277,115 @@ async function markRemoved(id) {
 function openDetail(id) {
   const item = items.find(i => i.id === id);
   if (!item) return;
-  const ec = expiryClass(item.expiry);
-  const d  = document.getElementById('detail-body');
-  d.innerHTML = `
-    <h2 style="font-family:var(--font-head);font-size:1.4rem;margin-bottom:4px">${esc(item.name)}</h2>
-    <p style="font-size:0.8rem;color:var(--muted);margin-bottom:20px">Added ${fmtDate(item.added)}</p>
-    ${ec==='expired' ? `<div class="expired-banner">⚠️ This item has expired and should be discarded.</div>` : ''}
-    <div class="result-pill">
-      <span class="pill-icon">📅</span>
-      <div><div class="pill-label">Best before / Use by</div>
-      <div class="pill-value" style="color:${ec==='expired'?'#e07070':ec==='warn'?'#f0a050':'#4caf7d'}">${expiryLabel(item.expiry)}</div></div>
-    </div>
-    <div class="result-pill">
-      <span class="pill-icon">${CAT_ICONS[item.category]||'📦'}</span>
-      <div><div class="pill-label">Stored in</div>
-      <div class="pill-value" style="text-transform:capitalize">${esc(item.category)}</div></div>
-    </div>
-    <div class="result-pill">
-      <span class="pill-icon">🔢</span>
-      <div><div class="pill-label">Barcode</div>
-      <div class="pill-value" style="font-family:monospace;font-size:0.9rem">${esc(item.barcode)}</div></div>
-    </div>
-    <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
-      <button class="btn btn-primary" onclick="markRemoved('${item.id}');closeDetail()">✅ Mark as used / thrown away</button>
-      <button class="btn btn-danger" onclick="deleteItem('${item.id}');closeDetail()">🗑️ Delete from pantry</button>
-      <button class="btn btn-secondary" onclick="closeDetail()">Close</button>
-    </div>`;
+  const d = document.getElementById('detail-body');
+
+  if (item.category === MED_CAT) {
+    const sc = medStockClass(item);
+    const ec = item.expiry ? expiryClass(item.expiry) : 'ok';
+    const dos = daysOfStock(item);
+    d.innerHTML = `
+      <h2 style="font-family:var(--font-head);font-size:1.4rem;margin-bottom:4px">${esc(item.name)}</h2>
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:20px">Added ${fmtDate(item.added)}</p>
+      ${sc==='expired' ? `<div class="expired-banner">⚠️ Very low stock — consider reordering soon.</div>` : ''}
+      ${ec==='expired' ? `<div class="expired-banner">⚠️ This medication has expired.</div>` : ''}
+
+      <div class="result-pill">
+        <span class="pill-icon">💊</span>
+        <div>
+          <div class="pill-label">Current quantity</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+            <button class="btn-icon" onclick="adjustQty('${id}',-1)">➖</button>
+            <span id="detail-qty" style="font-weight:600;font-size:1.1rem;min-width:40px;text-align:center">${item.quantity ?? '—'}</span>
+            <button class="btn-icon" onclick="adjustQty('${id}',1)">➕</button>
+          </div>
+          ${dos !== null ? `<div style="font-size:0.78rem;color:var(--muted);margin-top:4px">${medStockLabel(item)}</div>` : ''}
+        </div>
+      </div>
+
+      ${item.dailyDose ? `<div class="result-pill">
+        <span class="pill-icon">📋</span>
+        <div><div class="pill-label">Daily dose</div>
+        <div class="pill-value">${item.dailyDose} per day</div></div>
+      </div>` : ''}
+
+      ${item.notes ? `<div class="result-pill">
+        <span class="pill-icon">📝</span>
+        <div><div class="pill-label">Notes</div>
+        <div class="pill-value">${esc(item.notes)}</div></div>
+      </div>` : ''}
+
+      ${item.expiry ? `<div class="result-pill">
+        <span class="pill-icon">📅</span>
+        <div><div class="pill-label">Expiry</div>
+        <div class="pill-value" style="color:${ec==='expired'?'#e07070':ec==='warn'?'#f0a050':'#4caf7d'}">${expiryLabel(item.expiry)}</div></div>
+      </div>` : ''}
+
+      <div class="result-pill" style="align-items:center;justify-content:space-between">
+        <div>
+          <div class="pill-label" style="font-size:0.75rem">Auto-countdown</div>
+          <div style="font-size:0.85rem">${item.autoCountdown !== false ? 'On — counts down daily' : 'Off — manual only'}</div>
+        </div>
+        <button class="btn-icon" onclick="toggleAutoCountdown('${id}')" title="Toggle auto-countdown">
+          ${item.autoCountdown !== false ? '⏸️' : '▶️'}
+        </button>
+      </div>
+
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
+        ${item.dailyDose ? `<button class="btn btn-primary" onclick="logDose('${id}');openDetail('${id}')">💊 Log a dose (−${item.dailyDose})</button>` : ''}
+        <button class="btn btn-danger" onclick="deleteItem('${item.id}');closeDetail()">🗑️ Remove medication</button>
+        <button class="btn btn-secondary" onclick="closeDetail()">Close</button>
+      </div>`;
+  } else {
+    const ec = item.expiry ? expiryClass(item.expiry) : 'ok';
+    d.innerHTML = `
+      <h2 style="font-family:var(--font-head);font-size:1.4rem;margin-bottom:4px">${esc(item.name)}</h2>
+      <p style="font-size:0.8rem;color:var(--muted);margin-bottom:20px">Added ${fmtDate(item.added)}</p>
+      ${ec==='expired' ? `<div class="expired-banner">⚠️ This item has expired and should be discarded.</div>` : ''}
+      ${item.expiry ? `<div class="result-pill">
+        <span class="pill-icon">📅</span>
+        <div><div class="pill-label">Best before / Use by</div>
+        <div class="pill-value" style="color:${ec==='expired'?'#e07070':ec==='warn'?'#f0a050':'#4caf7d'}">${expiryLabel(item.expiry)}</div></div>
+      </div>` : ''}
+      <div class="result-pill">
+        <span class="pill-icon">${CAT_ICONS[item.category]||'📦'}</span>
+        <div><div class="pill-label">Category</div>
+        <div class="pill-value" style="text-transform:capitalize">${esc(item.category)}</div></div>
+      </div>
+      ${item.barcode ? `<div class="result-pill">
+        <span class="pill-icon">🔢</span>
+        <div><div class="pill-label">Barcode</div>
+        <div class="pill-value" style="font-family:monospace;font-size:0.9rem">${esc(item.barcode)}</div></div>
+      </div>` : ''}
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:8px">
+        <button class="btn btn-primary" onclick="markRemoved('${item.id}');closeDetail()">✅ Mark as used / thrown away</button>
+        <button class="btn btn-danger" onclick="deleteItem('${item.id}');closeDetail()">🗑️ Delete from pantry</button>
+        <button class="btn btn-secondary" onclick="closeDetail()">Close</button>
+      </div>`;
+  }
   openModal('detail-modal');
+}
+
+// Adjust quantity directly from detail modal
+async function adjustQty(id, delta) {
+  const item = items.find(i => i.id === id);
+  if (!item || item.quantity == null) return;
+  item.quantity = Math.max(0, item.quantity + delta);
+  await dbPut(item);
+  await loadItems();
+  // Update the qty display without closing the modal
+  const el = document.getElementById('detail-qty');
+  if (el) el.textContent = item.quantity;
+  render();
+}
+
+async function toggleAutoCountdown(id) {
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  item.autoCountdown = item.autoCountdown === false ? true : false;
+  await dbPut(item);
+  await loadItems();
+  openDetail(id); // refresh detail modal
+  render();
 }
 
 function closeDetail() { closeModal('detail-modal'); }
@@ -549,6 +707,12 @@ function showStep3() {
   updateSteps(3);
   setSubtitle('Step 3 of 3 — Confirm details');
   const body = document.getElementById('modal-body');
+  const catOptions = CATEGORIES.map(c => {
+    const label = c.charAt(0).toUpperCase() + c.slice(1);
+    const selected = c === (scanData.category || 'cupboard') ? 'selected' : '';
+    return `<option value="${c}" ${selected}>${CAT_ICONS[c]} ${label}</option>`;
+  }).join('');
+
   body.innerHTML = `
     <div class="field">
       <label>Product name</label>
@@ -559,38 +723,129 @@ function showStep3() {
       <input type="text" id="confirm-barcode" value="${esc(scanData.barcode)}" readonly style="opacity:0.6" />
     </div>
     <div class="field">
-      <label>Use-by / Best before</label>
-      <input type="date" id="confirm-date" value="${esc(scanData.expiry||today())}" />
+      <label>Category</label>
+      <select id="confirm-cat">${catOptions}</select>
     </div>
-    <div class="field">
-      <label>Stored in</label>
-      <select id="confirm-cat">
-        ${CATEGORIES.map(c=>`<option value="${c}" ${c==='cupboard'?'selected':''}>${CAT_ICONS[c]} ${c.charAt(0).toUpperCase()+c.slice(1)}</option>`).join('')}
-      </select>
-    </div>
+    <div id="confirm-extra"></div>
     <button class="btn btn-primary" id="btn-save-item">✅ Add to Pantry</button>
     <button class="btn btn-secondary" onclick="showStep2()" style="margin-top:8px">← Back</button>`;
 
+  // Show/hide extra fields based on category
+  function updateExtraFields() {
+    const cat = document.getElementById('confirm-cat').value;
+    const extra = document.getElementById('confirm-extra');
+    if (cat === MED_CAT) {
+      extra.innerHTML = `
+        <div class="field">
+          <label>Current quantity (tablets/ml/etc)</label>
+          <input type="number" id="confirm-qty" min="0" placeholder="e.g. 28" />
+        </div>
+        <div class="field">
+          <label>Daily dose (how many per day)</label>
+          <input type="number" id="confirm-dose" min="0" step="0.5" placeholder="e.g. 2" />
+        </div>
+        <div class="field">
+          <label>Auto-countdown quantity each day?</label>
+          <select id="confirm-auto">
+            <option value="yes">Yes — count down automatically</option>
+            <option value="no">No — I'll update it manually</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Expiry date (optional)</label>
+          <input type="date" id="confirm-date" />
+        </div>
+        <div class="field">
+          <label>Notes (dosage instructions etc, optional)</label>
+          <input type="text" id="confirm-notes" placeholder="e.g. Take with food" />
+        </div>`;
+    } else {
+      extra.innerHTML = `
+        <div class="field">
+          <label>Use-by / Best before (optional for non-food)</label>
+          <input type="date" id="confirm-date" value="${esc(scanData.expiry||'')}" />
+        </div>`;
+    }
+  }
+
+  updateExtraFields();
+  document.getElementById('confirm-cat').addEventListener('change', updateExtraFields);
   document.getElementById('btn-save-item').onclick = saveItem;
 }
 
 async function saveItem() {
-  const name   = document.getElementById('confirm-name').value.trim();
-  const barcode= document.getElementById('confirm-barcode').value.trim();
-  const expiry = document.getElementById('confirm-date').value;
-  const cat    = document.getElementById('confirm-cat').value;
-  if (!name || !expiry) { alert('Please fill in the name and date.'); return; }
+  const name    = document.getElementById('confirm-name').value.trim();
+  const barcode = document.getElementById('confirm-barcode').value.trim();
+  const cat     = document.getElementById('confirm-cat').value;
+  const dateEl  = document.getElementById('confirm-date');
+  const expiry  = dateEl ? dateEl.value : '';
+
+  if (!name) { alert('Please enter a product name.'); return; }
 
   const item = {
-    id:       crypto.randomUUID(),
-    name, barcode, expiry, category: cat,
-    added:    today(),
-    removed:  false
+    id: crypto.randomUUID(),
+    name, barcode, category: cat,
+    expiry: expiry || null,
+    added: today(),
+    removed: false,
+    lastCountdown: today(),
   };
+
+  if (cat === MED_CAT) {
+    const qty   = parseFloat(document.getElementById('confirm-qty')?.value) || 0;
+    const dose  = parseFloat(document.getElementById('confirm-dose')?.value) || 0;
+    const auto  = document.getElementById('confirm-auto')?.value === 'yes';
+    const notes = document.getElementById('confirm-notes')?.value.trim() || '';
+    item.quantity      = qty;
+    item.dailyDose     = dose || null;
+    item.autoCountdown = auto;
+    item.notes         = notes;
+  }
+
   await dbPut(item);
   await loadItems();
   render();
   closeModal('scan-modal');
+}
+
+// ═══════════════════════════════════════════════
+//  Medication: log a dose manually
+// ═══════════════════════════════════════════════
+async function logDose(id) {
+  const item = items.find(i => i.id === id);
+  if (!item || item.quantity == null) return;
+  const dose = item.dailyDose || 1;
+  item.quantity = Math.max(0, item.quantity - dose);
+  item.lastCountdown = today();
+  await dbPut(item);
+  await loadItems();
+  render();
+}
+
+// ═══════════════════════════════════════════════
+//  Medication: auto-countdown on app open
+//  Works out how many days have passed since last
+//  countdown and deducts the doses for those days
+// ═══════════════════════════════════════════════
+async function runMedCountdowns() {
+  const todayStr = today();
+  let changed = false;
+  for (const item of items) {
+    if (item.removed || item.category !== MED_CAT) continue;
+    if (!item.autoCountdown || !item.dailyDose || item.quantity == null) continue;
+    const last = item.lastCountdown || item.added || todayStr;
+    if (last === todayStr) continue;
+    // Count calendar days passed
+    const daysPassed = Math.max(0, Math.round(
+      (new Date(todayStr + 'T00:00:00') - new Date(last + 'T00:00:00')) / 86400000
+    ));
+    if (daysPassed <= 0) continue;
+    item.quantity      = Math.max(0, item.quantity - (item.dailyDose * daysPassed));
+    item.lastCountdown = todayStr;
+    await dbPut(item);
+    changed = true;
+  }
+  if (changed) await loadItems();
 }
 
 // ═══════════════════════════════════════════════
@@ -610,7 +865,7 @@ async function loadItems() {
 // ═══════════════════════════════════════════════
 
 // !! REPLACE THIS with your own Client ID from Google Cloud Console !!
-const GOOGLE_CLIENT_ID = '756553788670-lqo1h7gqf91csgr1j5c5ji77fonmnts5.apps.googleusercontent.com';
+const GOOGLE_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID_HERE';
 
 const DRIVE_SCOPE    = 'https://www.googleapis.com/auth/drive.appdata';
 const DRIVE_FILENAME = 'pantry-tracker-backup.json';
@@ -908,5 +1163,22 @@ document.getElementById('search').addEventListener('input', e => {
 (async () => {
   await openDB();
   await loadItems();
+  await runMedCountdowns();
   render();
+
+  // Schedule next countdown check at midnight
+  function scheduleNextMidnight() {
+    const now  = new Date();
+    const next = new Date(now);
+    next.setDate(next.getDate() + 1);
+    next.setHours(0, 0, 10, 0); // 00:00:10 tomorrow
+    const ms = next - now;
+    setTimeout(async () => {
+      await loadItems();
+      await runMedCountdowns();
+      render();
+      scheduleNextMidnight();
+    }, ms);
+  }
+  scheduleNextMidnight();
 })();

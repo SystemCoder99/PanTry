@@ -326,6 +326,7 @@ async function markRemoved(id) {
   await dbPut(item);
   await loadItems();
   render();
+  scheduleAutoBackup();
 }
 
 function openDetail(id) {
@@ -430,6 +431,7 @@ async function adjustQty(id, delta) {
   const el = document.getElementById('detail-qty');
   if (el) el.textContent = item.quantity;
   render();
+  scheduleAutoBackup();
 }
 
 async function toggleAutoCountdown(id) {
@@ -440,6 +442,7 @@ async function toggleAutoCountdown(id) {
   await loadItems();
   openDetail(id); // refresh detail modal
   render();
+  scheduleAutoBackup();
 }
 
 function closeDetail() { closeModal('detail-modal'); }
@@ -448,6 +451,7 @@ async function deleteItem(id) {
   await dbDelete(id);
   await loadItems();
   render();
+  scheduleAutoBackup();
 }
 
 // ═══════════════════════════════════════════════
@@ -950,6 +954,27 @@ async function saveItem() {
   await loadItems();
   render();
   closeModal('scan-modal');
+  scheduleAutoBackup();
+}
+
+// ═══════════════════════════════════════════════
+//  Auto-backup: debounced, fires 3s after last change
+//  Only runs if Drive is configured and user has
+//  already authenticated this session
+// ═══════════════════════════════════════════════
+let _autoBackupTimer = null;
+
+function scheduleAutoBackup() {
+  // Don't attempt if not configured or not yet signed in this session
+  if (GOOGLE_CLIENT_ID === 'YOUR_GOOGLE_CLIENT_ID_HERE') return;
+  if (!driveToken || Date.now() >= driveTokenExp - 60000) return;
+
+  clearTimeout(_autoBackupTimer);
+  _autoBackupTimer = setTimeout(async () => {
+    console.log('[AutoBackup] Saving to Drive…');
+    const r = await backupToDrive();
+    console.log('[AutoBackup]', r.ok ? 'Saved ✓' : `Failed: ${r.error}`);
+  }, 3000);
 }
 
 // ═══════════════════════════════════════════════
@@ -964,6 +989,7 @@ async function logDose(id) {
   await dbPut(item);
   await loadItems();
   render();
+  scheduleAutoBackup();
 }
 
 // ═══════════════════════════════════════════════

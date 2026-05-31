@@ -129,8 +129,11 @@ async function signInWithGoogle() {
           // Send to our server to get a JWT back
           const r = await fetch(`${SERVER_URL}/auth/google`, {
             method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ id_token: resp.access_token, sub: userinfo.sub, email: userinfo.email, name: userinfo.name })
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${resp.access_token}`
+            },
+            body:    JSON.stringify({ sub: userinfo.sub, email: userinfo.email, name: userinfo.name })
           });
           if (!r.ok) throw new Error('Server auth failed');
           const data = await r.json();
@@ -1545,7 +1548,7 @@ document.getElementById('btn-install').onclick = async () => {
 // ═══════════════════════════════════════════════
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js')
+    navigator.serviceWorker.register('/PanTry/sw.js')
       .then(r => console.log('[SW] Registered', r.scope))
       .catch(e => console.warn('[SW] Failed', e));
   });

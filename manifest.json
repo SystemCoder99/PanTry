@@ -1,8 +1,9 @@
 {
-  "name": "Pantry Tracker",
-  "short_name": "Pantry",
+  "name": "PanTry",
+  "short_name": "PanTry",
   "description": "Scan barcodes and track use-by dates for your groceries",
-  "start_url": "/",
+  "start_url": "/PanTry/",
+  "scope": "/PanTry/",
   "display": "standalone",
   "background_color": "#1a1208",
   "theme_color": "#1a1208",

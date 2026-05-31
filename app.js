@@ -1483,12 +1483,20 @@ function openDriveModal() {
     };
 
     document.getElementById('btn-sign-in')?.addEventListener('click', async () => {
-      setResult('⏳ Signing in…', true);
+      const btn = document.getElementById('btn-sign-in');
+      if (btn) { btn.disabled = true; btn.textContent = '⏳ Signing in…'; }
+      setResult('', true);
       try {
         const user = await signInWithGoogle();
         setDriveStatus('connected', user.name || 'Signed in');
-        openDriveModal();
-      } catch(e) { setResult('❌ ' + e.message, false); }
+        // Show success briefly before refreshing the modal
+        if (btn) { btn.textContent = '✅ Signed in!'; btn.style.background = 'var(--ok)'; }
+        setResult('✅ Signed in as ' + (user.email || user.name), true);
+        setTimeout(() => openDriveModal(), 1200);
+      } catch(e) {
+        if (btn) { btn.disabled = false; btn.textContent = '🔑 Sign in with Google'; }
+        setResult('❌ ' + e.message, false);
+      }
     });
 
     document.getElementById('btn-do-backup')?.addEventListener('click', async () => {

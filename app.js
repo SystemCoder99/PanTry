@@ -1,6 +1,200 @@
 'use strict';
 
 // ═══════════════════════════════════════════════
+//  Themes — ported from Patchwork
+// ═══════════════════════════════════════════════
+const THEMES = {
+  ember: {
+    label: 'Ember', accent: '#e8a840', bg: '#1a1614',
+    vars: {
+      '--bg': '#1a1614', '--surface': '#1e1a17', '--surface2': '#2a2118',
+      '--border': '#2e2926', '--text': '#e8d5c4', '--muted': '#8c7b6e',
+      '--accent': '#e8a840', '--accent2': '#c47820',
+      '--danger': '#e07060', '--warn': '#e8a840', '--ok': '#5dc8a0',
+    }
+  },
+  dusk: {
+    label: 'Dusk', accent: '#c87ef0', bg: '#141218',
+    vars: {
+      '--bg': '#141218', '--surface': '#1c1920', '--surface2': '#261e30',
+      '--border': '#2a2632', '--text': '#e4d8f0', '--muted': '#857099',
+      '--accent': '#c87ef0', '--accent2': '#a050c0',
+      '--danger': '#e07060', '--warn': '#e8a840', '--ok': '#5dc8a0',
+    }
+  },
+  moss: {
+    label: 'Moss', accent: '#6ec88a', bg: '#121614',
+    vars: {
+      '--bg': '#121614', '--surface': '#181e18', '--surface2': '#1e2c22',
+      '--border': '#243028', '--text': '#d0e8d8', '--muted': '#708878',
+      '--accent': '#6ec88a', '--accent2': '#3e9858',
+      '--danger': '#e07060', '--warn': '#e8a840', '--ok': '#5dc8a0',
+    }
+  },
+  rose: {
+    label: 'Rose', accent: '#e87090', bg: '#1a1416',
+    vars: {
+      '--bg': '#1a1416', '--surface': '#1e181c', '--surface2': '#2a1e24',
+      '--border': '#2e242a', '--text': '#f0d4dc', '--muted': '#9c7880',
+      '--accent': '#e87090', '--accent2': '#b84060',
+      '--danger': '#e07060', '--warn': '#e8a840', '--ok': '#5dc8a0',
+    }
+  },
+  slate: {
+    label: 'Slate', accent: '#70a8d0', bg: '#131518',
+    vars: {
+      '--bg': '#131518', '--surface': '#181d22', '--surface2': '#1e2830',
+      '--border': '#24292e', '--text': '#d0dce8', '--muted': '#6e7e90',
+      '--accent': '#70a8d0', '--accent2': '#4070a0',
+      '--danger': '#e07060', '--warn': '#e8a840', '--ok': '#5dc8a0',
+    }
+  },
+  sand: {
+    label: 'Sand', accent: '#8c5e20', bg: '#f0ece8',
+    vars: {
+      '--bg': '#f0ece8', '--surface': '#e8e0d8', '--surface2': '#e0d4c4',
+      '--border': '#d0c8c0', '--text': '#2a2018', '--muted': '#887060',
+      '--accent': '#8c5e20', '--accent2': '#6a4010',
+      '--danger': '#c04040', '--warn': '#c07020', '--ok': '#2c8050',
+    }
+  },
+  'high-dark': {
+    label: 'Hi-Dark', accent: '#ffffff', bg: '#000000',
+    vars: {
+      '--bg': '#000000', '--surface': '#111111', '--surface2': '#1a1a1a',
+      '--border': '#444444', '--text': '#ffffff', '--muted': '#aaaaaa',
+      '--accent': '#ffff00', '--accent2': '#cccc00',
+      '--danger': '#ff4444', '--warn': '#ffaa00', '--ok': '#44ff88',
+    }
+  },
+  'high-light': {
+    label: 'Hi-Light', accent: '#000080', bg: '#ffffff',
+    vars: {
+      '--bg': '#ffffff', '--surface': '#f0f0f0', '--surface2': '#e0e0e0',
+      '--border': '#999999', '--text': '#000000', '--muted': '#444444',
+      '--accent': '#000080', '--accent2': '#000060',
+      '--danger': '#cc0000', '--warn': '#cc6600', '--ok': '#006600',
+    }
+  },
+};
+
+let currentTheme    = localStorage.getItem('pantry-theme')    || 'ember';
+let currentFontSize = localStorage.getItem('pantry-font-size') || 'md';
+let largeTapTargets = localStorage.getItem('pantry-large-tap') === 'true';
+
+function applyTheme(name) {
+  const theme = THEMES[name] || THEMES.ember;
+  const root  = document.documentElement;
+  for (const [k, v] of Object.entries(theme.vars)) {
+    root.style.setProperty(k, v);
+  }
+  currentTheme = name;
+  localStorage.setItem('pantry-theme', name);
+}
+
+function applyFontSize(size) {
+  document.body.classList.remove('font-sm','font-md','font-lg','font-xl');
+  document.body.classList.add(`font-${size}`);
+  currentFontSize = size;
+  localStorage.setItem('pantry-font-size', size);
+}
+
+function applyLargeTapTargets(on) {
+  largeTapTargets = on;
+  document.body.classList.toggle('large-targets', on);
+  localStorage.setItem('pantry-large-tap', on);
+}
+
+function initSettings() {
+  applyTheme(currentTheme);
+  applyFontSize(currentFontSize);
+  applyLargeTapTargets(largeTapTargets);
+}
+
+// ═══════════════════════════════════════════════
+//  Sign-in banner
+// ═══════════════════════════════════════════════
+let _bannerDismissed = false;
+
+function showSignInBanner(reason = '') {
+  if (_bannerDismissed || !isServerConfigured()) return;
+  const banner = document.getElementById('signin-banner');
+  const inner  = banner?.querySelector('.signin-banner-inner');
+  const reasonEl = document.getElementById('signin-banner-reason');
+  if (!banner) return;
+  if (reason === 'expired') {
+    if (inner) inner.classList.add('error');
+    if (reasonEl) reasonEl.textContent = ' — your session expired, please sign in again';
+  } else {
+    if (inner) inner.classList.remove('error');
+    if (reasonEl) reasonEl.textContent = ' — tap to back up and restore your pantry across devices';
+  }
+  banner.style.display = 'block';
+}
+
+function hideSignInBanner() {
+  const banner = document.getElementById('signin-banner');
+  if (banner) banner.style.display = 'none';
+}
+
+function closeBanner() {
+  _bannerDismissed = true;
+  hideSignInBanner();
+}
+
+// ═══════════════════════════════════════════════
+//  Settings modal
+// ═══════════════════════════════════════════════
+function openSettingsModal() {
+  const body = document.getElementById('settings-body');
+  const sizes = [
+    { key: 'sm', label: 'A',  style: 'font-size:0.8rem' },
+    { key: 'md', label: 'A',  style: 'font-size:1rem' },
+    { key: 'lg', label: 'A',  style: 'font-size:1.2rem' },
+    { key: 'xl', label: 'A',  style: 'font-size:1.5rem' },
+  ];
+
+  body.innerHTML = `
+    <div class="field" style="margin-bottom:8px">
+      <label>Theme</label>
+    </div>
+    <div class="theme-grid">
+      ${Object.entries(THEMES).map(([key, t]) => `
+        <div class="theme-swatch ${key===currentTheme?'active':''}"
+          style="background:${t.bg};color:${t.vars['--text']}"
+          onclick="applyTheme('${key}');openSettingsModal()">
+          <div class="swatch-dot" style="background:${t.accent}"></div>
+          ${t.label}
+        </div>`).join('')}
+    </div>
+
+    <div class="field" style="margin-bottom:8px"><label>Font size</label></div>
+    <div class="size-row">
+      ${sizes.map(s => `
+        <button class="size-btn ${s.key===currentFontSize?'active':''}"
+          style="${s.style}"
+          onclick="applyFontSize('${s.key}');openSettingsModal()">
+          ${s.label}
+        </button>`).join('')}
+    </div>
+
+    <div class="sync-row" style="margin-bottom:16px">
+      <div>
+        <div class="sync-row-title">Larger tap targets</div>
+        <div class="sync-row-label">Bigger buttons and cards</div>
+      </div>
+      <button class="btn-icon" onclick="applyLargeTapTargets(${!largeTapTargets});openSettingsModal()">
+        ${largeTapTargets ? '✅' : '⬜'}
+      </button>
+    </div>
+
+    <button class="btn btn-secondary" onclick="closeModal('settings-modal')">Close</button>`;
+
+  openModal('settings-modal');
+}
+
+
+// ═══════════════════════════════════════════════
 //  DB — IndexedDB via a tiny wrapper
 // ═══════════════════════════════════════════════
 const DB_NAME = 'pantry-db';
@@ -108,6 +302,28 @@ let authToken  = localStorage.getItem('pantry-auth-token') || null;
 let encKey     = null;  // CryptoKey, set after Google sign-in
 let serverUser = null;  // {name, email}
 
+// Restore session silently from localStorage if we have a saved sub
+async function restoreSession() {
+  const sub   = localStorage.getItem('pantry-user-sub');
+  const name  = localStorage.getItem('pantry-user-name');
+  const email = localStorage.getItem('pantry-user-email');
+  if (!sub || !authToken) return false;
+  try {
+    encKey     = await deriveKey(sub);
+    serverUser = { name, email };
+    setDriveStatus('connected', name || 'Signed in');
+    // Send key to service worker
+    navigator.serviceWorker.ready.then(reg => {
+      reg.active?.postMessage({ type: 'SET_ENC_KEY', key: encKey });
+    });
+    console.log('[Auth] Session restored for', email);
+    return true;
+  } catch(e) {
+    console.warn('[Auth] Session restore failed:', e);
+    return false;
+  }
+}
+
 function isServerConfigured() {
   return !!SERVER_URL && SERVER_URL !== 'YOUR_SERVER_URL_HERE';
 }
@@ -140,6 +356,9 @@ async function signInWithGoogle() {
           authToken  = data.token;
           serverUser = { name: data.name, email: data.email };
           localStorage.setItem('pantry-auth-token', authToken);
+          localStorage.setItem('pantry-user-sub',   userinfo.sub);
+          localStorage.setItem('pantry-user-name',  data.name);
+          localStorage.setItem('pantry-user-email', data.email);
           // Derive encryption key from Google sub (unique stable user ID)
           encKey = await deriveKey(userinfo.sub);
 
@@ -249,9 +468,14 @@ async function syncToServer(itemList) {
       body:    JSON.stringify({ data: encrypted, notif_data: notifSummary })
     });
     if (r.status === 401) {
-      // Token expired — clear and let user re-sign in next time they open Drive modal
-      authToken = null;
+      // Token expired — clear everything and let user re-sign in
+      authToken = null; encKey = null; serverUser = null;
       localStorage.removeItem('pantry-auth-token');
+      localStorage.removeItem('pantry-user-sub');
+      localStorage.removeItem('pantry-user-name');
+      localStorage.removeItem('pantry-user-email');
+      setDriveStatus('error', 'Please sign in again');
+      showSignInBanner('expired');
     }
   } catch(e) {
     console.warn('[Sync] Failed:', e);
@@ -770,7 +994,19 @@ async function lookupBarcode(barcode) {
     const r = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
     const j = await r.json();
     if (j.status === 1) {
-      return j.product.product_name || j.product.product_name_en || null;
+      const p     = j.product;
+      const brand = (p.brands || '').split(',')[0].trim();  // take first brand only
+      const name  = p.product_name_en || p.product_name || p.abbreviated_product_name || p.generic_name || '';
+
+      if (brand && name) {
+        // Avoid duplicating the brand if it's already in the name
+        // e.g. "Oreo" + "Oreo Original" → "Oreo Original" not "Oreo Oreo Original"
+        if (name.toLowerCase().startsWith(brand.toLowerCase())) {
+          return name;
+        }
+        return `${brand} ${name}`;
+      }
+      return name || brand || null;
     }
   } catch(e) {}
   return null;
@@ -1492,6 +1728,7 @@ function openDriveModal() {
         // Show success briefly before refreshing the modal
         if (btn) { btn.textContent = '✅ Signed in!'; btn.style.background = 'var(--ok)'; }
         setResult('✅ Signed in as ' + (user.email || user.name), true);
+        hideSignInBanner();
         setTimeout(() => openDriveModal(), 1200);
       } catch(e) {
         if (btn) { btn.disabled = false; btn.textContent = '🔑 Sign in with Google'; }
@@ -1576,10 +1813,11 @@ document.getElementById('fab-scan').onclick = () => {
 
 document.getElementById('fab-manual').onclick = showManualEntry;
 
-document.getElementById('btn-drive').onclick = openDriveModal;
+document.getElementById('btn-drive').onclick    = openDriveModal;
+document.getElementById('btn-settings').onclick = openSettingsModal;
 
 // Close modals on backdrop click
-['scan-modal','detail-modal','drive-modal'].forEach(id => {
+['scan-modal','detail-modal','drive-modal','settings-modal'].forEach(id => {
   document.getElementById(id).addEventListener('click', e => {
     if (e.target.id === id) closeModal(id);
   });
@@ -1605,17 +1843,17 @@ document.getElementById('search').addEventListener('input', e => {
 //  Boot
 // ═══════════════════════════════════════════════
 (async () => {
+  initSettings();
   await openDB();
   await loadItems();
   await runMedCountdowns();
   render();
 
-  // If already signed in from a previous session, re-send the key to the SW
-  // The SW loses the key when it restarts, so we need to resend it on every app open
-  if (authToken && encKey && navigator.serviceWorker.controller) {
-    navigator.serviceWorker.ready.then(reg => {
-      reg.active?.postMessage({ type: 'SET_ENC_KEY', key: encKey });
-    });
+  // Restore session silently on boot — re-derives encryption key from stored sub
+  // so the user doesn't have to sign in every time they open the app
+  const restored = await restoreSession();
+  if (!restored && isServerConfigured()) {
+    showSignInBanner();
   }
 
   // Schedule next countdown check at midnight

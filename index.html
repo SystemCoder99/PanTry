@@ -276,6 +276,56 @@
       display: flex; align-items: center; gap: 8px;
     }
 
+    /* ── Sign-in banner ── */
+    .signin-banner-inner {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 16px; background: #2a1e30; border-bottom: 1px solid #5c3670;
+      font-size: 0.82rem; color: #d4a8f0; gap: 8px;
+    }
+    .signin-banner-inner.error {
+      background: #2a1010; border-bottom-color: #6b2020; color: #f0a0a0;
+    }
+
+    /* ── Theme swatches ── */
+    .theme-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 20px;
+    }
+    .theme-swatch {
+      border-radius: 10px; padding: 10px 8px; cursor: pointer;
+      border: 2px solid transparent; transition: all 0.2s;
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      font-size: 0.75rem; font-weight: 500;
+    }
+    .theme-swatch.active { border-color: white; }
+    .theme-swatch .swatch-dot {
+      width: 24px; height: 24px; border-radius: 50%;
+    }
+
+    /* ── Font size options ── */
+    .size-row {
+      display: flex; gap: 8px; margin-bottom: 20px;
+    }
+    .size-btn {
+      flex: 1; padding: 10px 4px; border-radius: 10px;
+      background: var(--surface2); border: 2px solid var(--border);
+      color: var(--text); cursor: pointer; font-family: var(--font-body);
+      font-weight: 500; transition: all 0.2s; text-align: center;
+    }
+    .size-btn.active { border-color: var(--accent); color: var(--accent); }
+
+    /* ── Large tap targets ── */
+    body.large-targets .btn-icon { padding: 10px 12px; font-size: 1.2rem; }
+    body.large-targets .item-card { padding: 18px 16px; }
+    body.large-targets nav button { padding: 16px 8px; }
+    body.large-targets .fab { padding: 18px 26px; font-size: 1rem; }
+    body.large-targets .fab-secondary { padding: 14px 20px; }
+
+    /* ── Font sizes ── */
+    body.font-sm  { font-size: 13px; }
+    body.font-md  { font-size: 16px; }
+    body.font-lg  { font-size: 19px; }
+    body.font-xl  { font-size: 22px; }
+
     /* ── Drive modal specific ── */
     .drive-info {
       background: var(--surface2); border: 1px solid var(--border);
@@ -302,6 +352,7 @@
         <span id="drive-status-text">Sync</span>
       </div>
       <button class="btn-icon" id="btn-drive" title="Sync">☁️</button>
+      <button class="btn-icon" id="btn-settings" title="Settings">⚙️</button>
       <button class="btn-icon" id="btn-install" style="display:none" title="Install app">⬇️</button>
     </div>
   </header>
@@ -320,6 +371,17 @@
       <span class="nav-icon">💊</span> Meds
     </button>
   </nav>
+
+  <!-- Sign-in banner — shown when not signed in to sync -->
+  <div id="signin-banner" style="display:none">
+    <div class="signin-banner-inner" onclick="openDriveModal()" style="cursor:pointer">
+      <div>
+        <strong>☁️ Sign in to sync</strong>
+        <span id="signin-banner-reason"> — tap to back up and restore your pantry across devices</span>
+      </div>
+      <button class="btn-icon" onclick="event.stopPropagation();closeBanner()" title="Dismiss">✕</button>
+    </div>
+  </div>
 
   <div class="search-bar">
     <input type="text" id="search" placeholder="Search items…" autocomplete="off" />
@@ -357,6 +419,16 @@
   <div class="modal">
     <div class="modal-handle"></div>
     <div id="detail-body"></div>
+  </div>
+</div>
+
+<!-- ── Settings Modal ── -->
+<div class="modal-backdrop" id="settings-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <h2>Settings</h2>
+    <p class="subtitle">Appearance and accessibility</p>
+    <div id="settings-body"></div>
   </div>
 </div>
 

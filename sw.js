@@ -1,7 +1,7 @@
 // sw.js — Pantry Tracker Service Worker
 // Cache-first for app shell, network-first for API calls
 
-const CACHE = 'pantry-v12';
+const CACHE = 'pantry-v13';
 const APP_SHELL = [
   '/PanTry/',
   '/PanTry/index.html',

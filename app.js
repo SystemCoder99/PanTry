@@ -188,6 +188,16 @@ function openSettingsModal() {
       </button>
     </div>
 
+    ${getCustomCategories().length ? `
+    <div class="field" style="margin-bottom:8px"><label>Custom categories</label></div>
+    <div style="margin-bottom:16px">
+      ${getCustomCategories().map(c => `
+        <div class="sync-row" style="margin-bottom:6px">
+          <div class="sync-row-title">📦 ${c.charAt(0).toUpperCase()+c.slice(1)}</div>
+          <button class="btn-icon" onclick="deleteCustomCategory('${c}')" title="Delete">🗑️</button>
+        </div>`).join('')}
+    </div>` : ''}
+
     <button class="btn btn-secondary" onclick="closeModal('settings-modal')">Close</button>`;
 
   openModal('settings-modal');
@@ -608,6 +618,28 @@ const CATEGORIES     = ['fridge','freezer','cupboard','drinks','cleaning','bathr
 const FOOD_CATS      = ['fridge','freezer','cupboard','drinks'];
 const MED_CAT        = 'medication';
 
+// ── Custom categories (stored in localStorage) ──
+function getCustomCategories() {
+  try { return JSON.parse(localStorage.getItem('pantry-custom-cats') || '[]'); }
+  catch { return []; }
+}
+function saveCustomCategory(name) {
+  const existing = getCustomCategories();
+  if (!existing.includes(name)) {
+    existing.push(name);
+    localStorage.setItem('pantry-custom-cats', JSON.stringify(existing));
+  }
+}
+function deleteCustomCategory(name) {
+  const existing = getCustomCategories().filter(c => c !== name);
+  localStorage.setItem('pantry-custom-cats', JSON.stringify(existing));
+  openSettingsModal(); // refresh
+}
+
+function getAllCategories() {
+  return [...CATEGORIES, ...getCustomCategories().filter(c => !CATEGORIES.includes(c))];
+}
+
 // ── Medication helpers ──
 function daysOfStock(item) {
   if (item.quantity == null || !item.dailyDose) return null;
@@ -676,15 +708,16 @@ function render() {
     return;
   }
 
+  const allCats = getAllCategories();
   const grouped = {};
-  for (const cat of CATEGORIES) grouped[cat] = [];
+  for (const cat of allCats) grouped[cat] = [];
   for (const item of filtered) {
-    const c = CATEGORIES.includes(item.category) ? item.category : 'other';
+    const c = allCats.includes(item.category) ? item.category : 'other';
     grouped[c].push(item);
   }
 
   let html = '';
-  for (const cat of CATEGORIES) {
+  for (const cat of allCats) {
     if (cat === MED_CAT) continue;
     const g = grouped[cat];
     if (!g.length) continue;
@@ -1256,11 +1289,18 @@ function showStep3(isManual = false) {
   updateSteps(3);
   setSubtitle(isManual ? 'Enter item details' : 'Step 3 of 3 — Confirm details');
   const body = document.getElementById('modal-body');
-  const catOptions = CATEGORIES.map(c => {
-    const label = c.charAt(0).toUpperCase() + c.slice(1);
-    const selected = c === (scanData.category || 'cupboard') ? 'selected' : '';
-    return `<option value="${c}" ${selected}>${CAT_ICONS[c]} ${label}</option>`;
-  }).join('');
+  // Load any custom categories saved previously
+  const customCats = getCustomCategories();
+  const allCats    = [...CATEGORIES, ...customCats.filter(c => !CATEGORIES.includes(c))];
+  const catOptions = [
+    ...allCats.map(c => {
+      const label    = c.charAt(0).toUpperCase() + c.slice(1);
+      const selected = c === (scanData.category || 'cupboard') ? 'selected' : '';
+      const icon     = CAT_ICONS[c] || '📦';
+      return `<option value="${c}" ${selected}>${icon} ${label}</option>`;
+    }),
+    `<option value="__new__">✏️ Create new category…</option>`
+  ].join('');
 
   body.innerHTML = `
     <div class="field">
@@ -1281,13 +1321,35 @@ function showStep3(isManual = false) {
       <label>Category</label>
       <select id="confirm-cat">${catOptions}</select>
     </div>
+    <div id="custom-cat-field" style="display:none;margin-top:-8px;margin-bottom:16px">
+      <input type="text" id="custom-cat-input"
+        placeholder="e.g. Pet supplies"
+        style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:11px 14px;color:var(--text);font-family:var(--font-body);font-size:0.95rem;outline:none" />
+    </div>
     <div id="confirm-extra"></div>
     <button class="btn btn-primary" id="btn-save-item">✅ Add to Pantry</button>
     <button class="btn btn-secondary" onclick="${isManual ? "closeModal('scan-modal')" : 'showStep2()'}" style="margin-top:8px">${isManual ? '✕ Cancel' : '← Back'}</button>`;
 
+  // Show/hide custom category input
+  function updateCatField() {
+    const cat      = document.getElementById('confirm-cat').value;
+    const fieldEl  = document.getElementById('custom-cat-field');
+    const inputEl  = document.getElementById('custom-cat-input');
+    if (cat === '__new__') {
+      fieldEl.style.display = 'block';
+      inputEl.focus();
+    } else {
+      fieldEl.style.display = 'none';
+    }
+    updateExtraFields();
+  }
+
   // Show/hide extra fields based on category
   function updateExtraFields() {
-    const cat = document.getElementById('confirm-cat').value;
+    const rawCat = document.getElementById('confirm-cat').value;
+    const cat    = rawCat === '__new__'
+      ? (document.getElementById('custom-cat-input')?.value.trim().toLowerCase() || 'other')
+      : rawCat;
     const extra = document.getElementById('confirm-extra');
     if (cat === MED_CAT) {
       extra.innerHTML = `
@@ -1324,7 +1386,8 @@ function showStep3(isManual = false) {
   }
 
   updateExtraFields();
-  document.getElementById('confirm-cat').addEventListener('change', updateExtraFields);
+  document.getElementById('confirm-cat').addEventListener('change', updateCatField);
+  document.getElementById('custom-cat-input')?.addEventListener('input', updateExtraFields);
   document.getElementById('btn-save-item').onclick = saveItem;
 
   // Optional inline barcode scanner (manual entry mode only)
@@ -1385,7 +1448,13 @@ function showStep3(isManual = false) {
 async function saveItem() {
   const name    = document.getElementById('confirm-name').value.trim();
   const barcode = document.getElementById('confirm-barcode').value.trim();
-  const cat     = document.getElementById('confirm-cat').value;
+  let cat = document.getElementById('confirm-cat').value;
+  if (cat === '__new__') {
+    const custom = document.getElementById('custom-cat-input')?.value.trim().toLowerCase();
+    if (!custom) { alert('Please enter a name for your new category.'); return; }
+    cat = custom;
+    saveCustomCategory(cat);
+  }
   const expiry  = getUkDate('confirm-date');
 
   if (!name) { alert('Please enter a product name.'); return; }

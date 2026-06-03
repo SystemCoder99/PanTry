@@ -771,7 +771,7 @@ function renderItemGroup(items) {
               <div class="item-name">${esc(name)}</div>
               ${barcode ? `<div class="item-barcode">${esc(barcode)}</div>` : ''}
             </div>
-            <button class="btn-icon" onclick="openChangeCat(${JSON.stringify(group.map(i=>i.id))})" title="Change category">🔄</button>
+            <button class="btn-icon" data-changecat="${esc(JSON.stringify(group.map(i=>i.id)))}" title="Change category">🔄</button>
           </div>`;
 
       for (const [dk, dateItems] of Object.entries(byDate)) {
@@ -787,7 +787,7 @@ function renderItemGroup(items) {
             </div>
             <div style="display:flex;gap:4px">
               <button class="btn-icon" onclick="openDetail(${JSON.stringify(dateItems[0].id)})" title="Details">ℹ️</button>
-              <button class="btn-icon" onclick="markOneRemoved(${ids})" title="Used one">✅</button>
+              <button class="btn-icon" data-removeone="${esc(ids)}" title="Used one">✅</button>
             </div>
           </div>`;
       }
@@ -811,9 +811,9 @@ function renderItemGroup(items) {
             </div>
           </div>
           <div class="item-actions">
-            <button class="btn-icon" onclick="openChangeCat(${ids})" title="Change category">🔄</button>
+            <button class="btn-icon" data-changecat="${esc(JSON.stringify(group.map(i=>i.id)))}" title="Change category">🔄</button>
             <button class="btn-icon" onclick="openDetail('${item.id}')" title="Details">ℹ️</button>
-            <button class="btn-icon" onclick="markOneRemoved(${ids})" title="Used one">✅</button>
+            <button class="btn-icon" data-removeone="${esc(ids)}" title="Used one">✅</button>
           </div>
         </div>`;
     }
@@ -2017,6 +2017,27 @@ document.getElementById('btn-settings').onclick = openSettingsModal;
   document.getElementById(id).addEventListener('click', e => {
     if (e.target.id === id) closeModal(id);
   });
+});
+
+// Delegated click handler for change-category buttons
+// (avoids quote-escaping issues in onclick attributes)
+document.getElementById('main-content').addEventListener('click', e => {
+  const changeCatBtn = e.target.closest('[data-changecat]');
+  if (changeCatBtn) {
+    try {
+      const ids = JSON.parse(changeCatBtn.dataset.changecat);
+      openChangeCat(ids);
+    } catch(err) { console.error('openChangeCat parse error:', err); }
+    return;
+  }
+
+  const removeOneBtn = e.target.closest('[data-removeone]');
+  if (removeOneBtn) {
+    try {
+      const ids = JSON.parse(removeOneBtn.dataset.removeone);
+      markOneRemoved(Array.isArray(ids) ? ids : [ids]);
+    } catch(err) { console.error('markOneRemoved parse error:', err); }
+  }
 });
 
 // Tab switching

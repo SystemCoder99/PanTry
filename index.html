@@ -276,6 +276,15 @@
       display: flex; align-items: center; gap: 8px;
     }
 
+    /* ── Item card action reveal ── */
+    .item-actions { transition: opacity 0.2s, width 0.2s; opacity: 0; width: 0; overflow: hidden; }
+    .item-card.expanded .item-actions { opacity: 1; width: auto; overflow: visible; }
+    .item-card { cursor: pointer; }
+
+    /* Sub-row actions (multi-date groups) */
+    .subrow-actions { transition: opacity 0.2s, width 0.2s; opacity: 0; width: 0; overflow: hidden; }
+    .item-card.expanded .subrow-actions { opacity: 1; width: auto; overflow: visible; }
+
     /* ── Sign-in banner ── */
     .signin-banner-inner {
       display: flex; align-items: center; justify-content: space-between;

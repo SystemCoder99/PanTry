@@ -785,7 +785,7 @@ function renderItemGroup(items) {
               <span class="item-date ${ec}">${dk !== '__none__' ? expiryLabel(dk) : 'No date'}</span>
               <span style="font-size:0.8rem;color:var(--muted);font-weight:600">×${qty}</span>
             </div>
-            <div style="display:flex;gap:4px">
+            <div class="subrow-actions" style="display:flex;gap:4px">
               <button class="btn-icon" data-addone='${JSON.stringify({name:group[0].name,barcode:group[0].barcode,category:group[0].category,expiry:dk!=="__none__"?dk:null})}' title="Add one more">➕</button>
               <button class="btn-icon" onclick="openDetail(${JSON.stringify(dateItems[0].id)})" title="Details">ℹ️</button>
               <button class="btn-icon" data-removeone='${ids}' title="Used one">✅</button>
@@ -2037,6 +2037,26 @@ document.getElementById('btn-settings').onclick = openSettingsModal;
   document.getElementById(id).addEventListener('click', e => {
     if (e.target.id === id) closeModal(id);
   });
+});
+
+// Tap card to expand/collapse action buttons
+document.getElementById('main-content').addEventListener('click', e => {
+  const card = e.target.closest('.item-card');
+  if (!card) return;
+  // If clicking a button inside the card, don't toggle
+  if (e.target.closest('button, a')) return;
+  // Collapse all other cards first
+  document.querySelectorAll('.item-card.expanded').forEach(c => {
+    if (c !== card) c.classList.remove('expanded');
+  });
+  card.classList.toggle('expanded');
+});
+
+// Tap outside any card to collapse all
+document.addEventListener('click', e => {
+  if (!e.target.closest('.item-card')) {
+    document.querySelectorAll('.item-card.expanded').forEach(c => c.classList.remove('expanded'));
+  }
 });
 
 // Delegated click handler for change-category buttons

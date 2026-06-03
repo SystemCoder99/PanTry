@@ -771,7 +771,7 @@ function renderItemGroup(items) {
               <div class="item-name">${esc(name)}</div>
               ${barcode ? `<div class="item-barcode">${esc(barcode)}</div>` : ''}
             </div>
-            <button class="btn-icon" data-changecat="${esc(JSON.stringify(group.map(i=>i.id)))}" title="Change category">🔄</button>
+            <button class="btn-icon" data-changecat='${JSON.stringify(group.map(i=>i.id))}' title="Change category">🔄</button>
           </div>`;
 
       for (const [dk, dateItems] of Object.entries(byDate)) {
@@ -787,7 +787,7 @@ function renderItemGroup(items) {
             </div>
             <div style="display:flex;gap:4px">
               <button class="btn-icon" onclick="openDetail(${JSON.stringify(dateItems[0].id)})" title="Details">ℹ️</button>
-              <button class="btn-icon" data-removeone="${esc(ids)}" title="Used one">✅</button>
+              <button class="btn-icon" data-removeone='${ids}' title="Used one">✅</button>
             </div>
           </div>`;
       }
@@ -811,9 +811,9 @@ function renderItemGroup(items) {
             </div>
           </div>
           <div class="item-actions">
-            <button class="btn-icon" data-changecat="${esc(JSON.stringify(group.map(i=>i.id)))}" title="Change category">🔄</button>
+            <button class="btn-icon" data-changecat='${JSON.stringify(group.map(i=>i.id))}' title="Change category">🔄</button>
             <button class="btn-icon" onclick="openDetail('${item.id}')" title="Details">ℹ️</button>
-            <button class="btn-icon" data-removeone="${esc(ids)}" title="Used one">✅</button>
+            <button class="btn-icon" data-removeone='${ids}' title="Used one">✅</button>
           </div>
         </div>`;
     }

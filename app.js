@@ -721,30 +721,104 @@ function render() {
     if (cat === MED_CAT) continue;
     const g = grouped[cat];
     if (!g.length) continue;
-    g.sort((a,b) => new Date(a.expiry||'9999') - new Date(b.expiry||'9999'));
     const label = cat.charAt(0).toUpperCase() + cat.slice(1);
     html += `<div class="category-group">
-      <div class="category-header">${CAT_ICONS[cat]} ${label}</div>`;
-    for (const item of g) {
-      const ec = item.expiry ? expiryClass(item.expiry) : 'ok';
-      html += `
-        <div class="item-card ${ec}" data-id="${item.id}">
-          <div class="item-info">
-            <div class="item-name">${esc(item.name)}</div>
-            <div class="item-meta">
-              ${item.expiry ? `<span class="item-date ${ec}">${expiryLabel(item.expiry)}</span>` : ''}
-              ${item.barcode ? `<span class="item-barcode">${esc(item.barcode)}</span>` : ''}
-            </div>
-          </div>
-          <div class="item-actions">
-            <button class="btn-icon" onclick="openDetail('${item.id}')" title="Details">ℹ️</button>
-            <button class="btn-icon" onclick="markRemoved('${item.id}')" title="Used / thrown away">✅</button>
-          </div>
-        </div>`;
-    }
+      <div class="category-header">${CAT_ICONS[cat]||'📦'} ${label}</div>`;
+    html += renderItemGroup(g);
     html += `</div>`;
   }
   el.innerHTML = html;
+}
+
+// Group items by barcode (or id if no barcode), then by expiry date
+function renderItemGroup(items) {
+  // Step 1: group by barcode key
+  const byBarcode = {};
+  for (const item of items) {
+    const key = item.barcode ? `bc:${item.barcode}` : `id:${item.id}`;
+    if (!byBarcode[key]) byBarcode[key] = [];
+    byBarcode[key].push(item);
+  }
+
+  let html = '';
+  for (const [, group] of Object.entries(byBarcode)) {
+    // Sort by expiry date ascending
+    group.sort((a,b) => new Date(a.expiry||'9999') - new Date(b.expiry||'9999'));
+
+    // Step 2: sub-group by expiry date
+    const byDate = {};
+    for (const item of group) {
+      const dk = item.expiry || '__none__';
+      if (!byDate[dk]) byDate[dk] = [];
+      byDate[dk].push(item);
+    }
+
+    const name    = group[0].name;
+    const barcode = group[0].barcode;
+    const hasMultipleDates = Object.keys(byDate).length > 1;
+
+    if (hasMultipleDates) {
+      // ── Grouped card with date sub-rows ──
+      const worstClass = Object.values(byDate).flat().reduce((worst, item) => {
+        const ec = item.expiry ? expiryClass(item.expiry) : 'ok';
+        return ec === 'expired' ? 'expired' : (ec === 'warn' && worst !== 'expired') ? 'warn' : worst;
+      }, 'ok');
+
+      html += `
+        <div class="item-card ${worstClass}" style="flex-direction:column;align-items:stretch;gap:8px">
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <div>
+              <div class="item-name">${esc(name)}</div>
+              ${barcode ? `<div class="item-barcode">${esc(barcode)}</div>` : ''}
+            </div>
+            <button class="btn-icon" onclick="openChangeCat(${JSON.stringify(group.map(i=>i.id))})" title="Change category">🔄</button>
+          </div>`;
+
+      for (const [dk, dateItems] of Object.entries(byDate)) {
+        const ec  = dk !== '__none__' ? expiryClass(dk) : 'ok';
+        const qty = dateItems.length;
+        const ids = JSON.stringify(dateItems.map(i => i.id));
+        html += `
+          <div style="display:flex;align-items:center;justify-content:space-between;
+            padding:8px 10px;background:var(--bg);border-radius:8px;gap:8px">
+            <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0">
+              <span class="item-date ${ec}">${dk !== '__none__' ? expiryLabel(dk) : 'No date'}</span>
+              <span style="font-size:0.8rem;color:var(--muted);font-weight:600">×${qty}</span>
+            </div>
+            <div style="display:flex;gap:4px">
+              <button class="btn-icon" onclick="openDetail(${JSON.stringify(dateItems[0].id)})" title="Details">ℹ️</button>
+              <button class="btn-icon" onclick="markOneRemoved(${ids})" title="Used one">✅</button>
+            </div>
+          </div>`;
+      }
+      html += `</div>`;
+    } else {
+      // ── Single date or no date — flat card with qty badge ──
+      const item = group[0];
+      const qty  = group.length;
+      const ec   = item.expiry ? expiryClass(item.expiry) : 'ok';
+      const ids  = JSON.stringify(group.map(i => i.id));
+      html += `
+        <div class="item-card ${ec}" data-id="${item.id}">
+          <div class="item-info">
+            <div class="item-name" style="display:flex;align-items:center;gap:6px">
+              ${esc(name)}
+              ${qty > 1 ? `<span style="font-size:0.75rem;background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:1px 6px;color:var(--muted);font-weight:600">×${qty}</span>` : ''}
+            </div>
+            <div class="item-meta">
+              ${item.expiry ? `<span class="item-date ${ec}">${expiryLabel(item.expiry)}</span>` : ''}
+              ${barcode ? `<span class="item-barcode">${esc(barcode)}</span>` : ''}
+            </div>
+          </div>
+          <div class="item-actions">
+            <button class="btn-icon" onclick="openChangeCat(${ids})" title="Change category">🔄</button>
+            <button class="btn-icon" onclick="openDetail('${item.id}')" title="Details">ℹ️</button>
+            <button class="btn-icon" onclick="markOneRemoved(${ids})" title="Used one">✅</button>
+          </div>
+        </div>`;
+    }
+  }
+  return html;
 }
 
 function renderMedications(el) {
@@ -808,6 +882,59 @@ async function markRemoved(id) {
   await loadItems();
   render();
   scheduleAutoBackup();
+}
+
+// Mark just one item from a date group as removed
+// ids is an array of IDs in that date group — we remove the first non-removed one
+async function markOneRemoved(ids) {
+  const id   = Array.isArray(ids) ? ids[0] : ids;
+  const item = items.find(i => i.id === id);
+  if (!item) return;
+  item.removed = true;
+  await dbPut(item);
+  await loadItems();
+  render();
+  scheduleAutoBackup();
+}
+
+// Change category for a group of items (all items with same barcode)
+function openChangeCat(ids) {
+  const idArr   = Array.isArray(ids) ? ids : [ids];
+  const first   = items.find(i => i.id === idArr[0]);
+  if (!first) return;
+  const allCats = getAllCategories().filter(c => c !== MED_CAT);
+  const d       = document.getElementById('detail-body');
+  const catOpts = allCats.map(c => {
+    const label    = c.charAt(0).toUpperCase() + c.slice(1);
+    const selected = c === first.category ? 'selected' : '';
+    return `<option value="${c}" ${selected}>${CAT_ICONS[c]||'📦'} ${label}</option>`;
+  }).join('');
+
+  d.innerHTML = `
+    <h2 style="font-family:var(--font-head);font-size:1.4rem;margin-bottom:4px">Change Category</h2>
+    <p style="font-size:0.85rem;color:var(--muted);margin-bottom:20px">
+      Moving ${idArr.length} item${idArr.length>1?'s':''} — <strong>${esc(first.name)}</strong>
+    </p>
+    <div class="field">
+      <label>Category</label>
+      <select id="changeCat-select">${catOpts}</select>
+    </div>
+    <button class="btn btn-primary" id="btn-changeCat-save">Move items</button>
+    <button class="btn btn-secondary" onclick="closeDetail()" style="margin-top:8px">Cancel</button>`;
+
+  document.getElementById('btn-changeCat-save').onclick = async () => {
+    const newCat = document.getElementById('changeCat-select').value;
+    for (const id of idArr) {
+      const item = items.find(i => i.id === id);
+      if (item) { item.category = newCat; await dbPut(item); }
+    }
+    await loadItems();
+    render();
+    scheduleAutoBackup();
+    closeDetail();
+  };
+
+  openModal('detail-modal');
 }
 
 function openDetail(id) {

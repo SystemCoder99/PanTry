@@ -786,6 +786,7 @@ function renderItemGroup(items) {
               <span style="font-size:0.8rem;color:var(--muted);font-weight:600">×${qty}</span>
             </div>
             <div style="display:flex;gap:4px">
+              <button class="btn-icon" data-addone='${JSON.stringify({name:group[0].name,barcode:group[0].barcode,category:group[0].category,expiry:dk!=="__none__"?dk:null})}' title="Add one more">➕</button>
               <button class="btn-icon" onclick="openDetail(${JSON.stringify(dateItems[0].id)})" title="Details">ℹ️</button>
               <button class="btn-icon" data-removeone='${ids}' title="Used one">✅</button>
             </div>
@@ -811,6 +812,7 @@ function renderItemGroup(items) {
             </div>
           </div>
           <div class="item-actions">
+            <button class="btn-icon" data-addone='${JSON.stringify({name:item.name,barcode:item.barcode,category:item.category,expiry:item.expiry||null})}' title="Add one more">➕</button>
             <button class="btn-icon" data-changecat='${JSON.stringify(group.map(i=>i.id))}' title="Change category">🔄</button>
             <button class="btn-icon" onclick="openDetail('${item.id}')" title="Details">ℹ️</button>
             <button class="btn-icon" data-removeone='${ids}' title="Used one">✅</button>
@@ -891,6 +893,24 @@ async function markOneRemoved(ids) {
   const item = items.find(i => i.id === id);
   if (!item) return;
   item.removed = true;
+  await dbPut(item);
+  await loadItems();
+  render();
+  scheduleAutoBackup();
+}
+
+// Add one more of an existing item (same name/barcode/category/expiry)
+async function addOneMore(template) {
+  const item = {
+    id:            crypto.randomUUID(),
+    name:          template.name,
+    barcode:       template.barcode  || '',
+    category:      template.category || 'other',
+    expiry:        template.expiry   || null,
+    added:         today(),
+    removed:       false,
+    lastCountdown: today(),
+  };
   await dbPut(item);
   await loadItems();
   render();
@@ -2021,7 +2041,7 @@ document.getElementById('btn-settings').onclick = openSettingsModal;
 
 // Delegated click handler for change-category buttons
 // (avoids quote-escaping issues in onclick attributes)
-document.getElementById('main-content').addEventListener('click', e => {
+document.getElementById('main-content').addEventListener('click', async e => {
   const changeCatBtn = e.target.closest('[data-changecat]');
   if (changeCatBtn) {
     try {
@@ -2037,6 +2057,15 @@ document.getElementById('main-content').addEventListener('click', e => {
       const ids = JSON.parse(removeOneBtn.dataset.removeone);
       markOneRemoved(Array.isArray(ids) ? ids : [ids]);
     } catch(err) { console.error('markOneRemoved parse error:', err); }
+    return;
+  }
+
+  const addOneBtn = e.target.closest('[data-addone]');
+  if (addOneBtn) {
+    try {
+      const template = JSON.parse(addOneBtn.dataset.addone);
+      await addOneMore(template);
+    } catch(err) { console.error('addOneMore parse error:', err); }
   }
 });
 

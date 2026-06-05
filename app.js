@@ -2040,28 +2040,9 @@ document.getElementById('btn-settings').onclick = openSettingsModal;
 });
 
 // Tap card to expand/collapse action buttons
-document.getElementById('main-content').addEventListener('click', e => {
-  const card = e.target.closest('.item-card');
-  if (!card) return;
-  // If clicking a button inside the card, don't toggle
-  if (e.target.closest('button, a')) return;
-  // Collapse all other cards first
-  document.querySelectorAll('.item-card.expanded').forEach(c => {
-    if (c !== card) c.classList.remove('expanded');
-  });
-  card.classList.toggle('expanded');
-});
-
-// Tap outside any card to collapse all
-document.addEventListener('click', e => {
-  if (!e.target.closest('.item-card')) {
-    document.querySelectorAll('.item-card.expanded').forEach(c => c.classList.remove('expanded'));
-  }
-});
-
-// Delegated click handler for change-category buttons
-// (avoids quote-escaping issues in onclick attributes)
+// Single delegated handler for all main-content clicks
 document.getElementById('main-content').addEventListener('click', async e => {
+  // ── Button actions first ──
   const changeCatBtn = e.target.closest('[data-changecat]');
   if (changeCatBtn) {
     try {
@@ -2086,6 +2067,23 @@ document.getElementById('main-content').addEventListener('click', async e => {
       const template = JSON.parse(addOneBtn.dataset.addone);
       await addOneMore(template);
     } catch(err) { console.error('addOneMore parse error:', err); }
+    return;
+  }
+
+  // ── Card expand/collapse (only if no button was clicked) ──
+  if (e.target.closest('button, a')) return;
+  const card = e.target.closest('.item-card');
+  if (!card) return;
+  document.querySelectorAll('.item-card.expanded').forEach(c => {
+    if (c !== card) c.classList.remove('expanded');
+  });
+  card.classList.toggle('expanded');
+});
+
+// Tap outside any card to collapse all
+document.addEventListener('click', e => {
+  if (!e.target.closest('.item-card')) {
+    document.querySelectorAll('.item-card.expanded').forEach(c => c.classList.remove('expanded'));
   }
 });
 
